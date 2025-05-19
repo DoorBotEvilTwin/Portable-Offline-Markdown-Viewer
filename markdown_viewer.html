@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portable Offline Markdown Viewer</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            overflow: hidden; /* Prevent body scrollbars when panes are full height */
+        }
+
+        .container {
+            display: flex;
+            height: 100vh; /* Full viewport height */
+            width: 100vw;  /* Full viewport width */
+        }
+
+        .pane {
+            flex-grow: 1; /* Panes share space equally by default */
+            flex-basis: 0; /* Allow flex-grow to distribute space from a zero basis */
+            overflow: auto; /* Add scrollbars if content overflows */
+            padding: 15px;
+            box-sizing: border-box;
+            height: 100%; /* Make panes take full height of container */
+        }
+
+        #input-pane {
+            background-color: #fdfdfd;
+            border-right: 1px solid #e0e0e0; /* Subtle border */
+        }
+
+        #markdown-input {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #d1d5da;
+            box-sizing: border-box;
+            padding: 10px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none; /* Disable textarea's own resizer */
+            background-color: #fff;
+            color: #24292e;
+        }
+        #markdown-input:focus {
+            outline: none;
+            border-color: #0366d6;
+            box-shadow: 0 0 0 2px rgba(3, 102, 214, 0.3);
+        }
+
+
+        #output-pane {
+            background-color: #ffffff;
+            padding-left: 20px; /* More space from resizer */
+        }
+
+        #html-output {
+            width: 100%;
+            height: 100%;
+            color: #24292e;
+            line-height: 1.6;
+        }
+
+        /* Basic Markdown Styling (inspired by GitHub) */
+        #html-output h1, #html-output h2, #html-output h3, #html-output h4, #html-output h5, #html-output h6 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            line-height: 1.25;
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 0.3em;
+        }
+        #html-output h1 { font-size: 2em; }
+        #html-output h2 { font-size: 1.5em; }
+        #html-output h3 { font-size: 1.25em; }
+        #html-output p { margin-top: 0; margin-bottom: 16px; }
+        #html-output ul, #html-output ol { margin-top: 0; margin-bottom: 16px; padding-left: 2em; }
+        #html-output li > p { margin-bottom: 0.2em; } /* Less space for p inside li */
+        #html-output blockquote {
+            margin: 0 0 16px 0;
+            padding: 0 1em;
+            color: #6a737d;
+            border-left: 0.25em solid #dfe2e5;
+        }
+        #html-output code {
+            padding: 0.2em 0.4em;
+            margin: 0;
+            font-size: 85%;
+            background-color: rgba(27,31,35,0.05);
+            border-radius: 3px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+        }
+        #html-output pre {
+            padding: 16px;
+            overflow: auto;
+            font-size: 85%;
+            line-height: 1.45;
+            background-color: #f6f8fa;
+            border-radius: 3px;
+            margin-bottom: 16px;
+            word-wrap: normal; /* Allow horizontal scroll for long lines */
+        }
+        #html-output pre code {
+            padding: 0;
+            margin: 0;
+            font-size: 100%;
+            background-color: transparent;
+            border-radius: 0;
+            display: inline;
+            max-width: auto;
+            overflow: visible;
+            line-height: inherit;
+            word-wrap: normal;
+        }
+        #html-output table {
+            border-collapse: collapse;
+            margin-top: 0;
+            margin-bottom: 16px;
+            display: block;
+            width: max-content;
+            max-width: 100%;
+            overflow: auto;
+        }
+        #html-output th, #html-output td {
+            padding: 6px 13px;
+            border: 1px solid #dfe2e5;
+        }
+        #html-output th { font-weight: 600; }
+        #html-output hr {
+            height: 0.25em;
+            padding: 0;
+            margin: 24px 0;
+            background-color: #e1e4e8;
+            border: 0;
+        }
+        #html-output img { max-width: 100%; box-sizing: content-box; background-color: #fff; }
+
+
+        .resizer {
+            width: 10px;
+            background-color: #e0e0e0; /* Slightly darker for better visibility */
+            cursor: col-resize;
+            flex-shrink: 0; /* Prevent resizer from shrinking */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative; /* For pseudo-element positioning */
+            z-index: 10;
+        }
+        .resizer:hover {
+            background-color: #c0c0c0;
+        }
+        .resizer::before { /* Visual grip dots */
+            content: '⋮';
+            color: #666;
+            font-size: 14px;
+            line-height: 0; /* Center vertically */
+        }
+    </style>
+    <!-- Make sure marked.min.js is in the same folder as this HTML file -->
+    <script src="marked.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="pane" id="input-pane">
+            <textarea id="markdown-input" placeholder="Paste or type Markdown here..."></textarea>
+        </div>
+        <div class="resizer" id="dragMe"></div>
+        <div class="pane" id="output-pane">
+            <div id="html-output"></div>
+        </div>
+    </div>
+
+    <script>
+        const markdownInput = document.getElementById('markdown-input');
+        const htmlOutput = document.getElementById('html-output');
+        const resizer = document.getElementById('dragMe');
+        const leftPane = document.getElementById('input-pane');
+        const rightPane = document.getElementById('output-pane');
+        const container = document.querySelector('.container');
+
+        // Function to render Markdown
+        function renderMarkdown() {
+            const mdText = markdownInput.value;
+            try {
+                // Using marked.parse() for marked v4+
+                // gfm: true for GitHub Flavored Markdown
+                // breaks: true for rendering single newlines as <br> (common preference)
+                htmlOutput.innerHTML = marked.parse(mdText, { gfm: true, breaks: true, pedantic: false });
+            } catch (e) {
+                // Fallback for older marked versions or if marked.parse is not available
+                try {
+                    htmlOutput.innerHTML = marked(mdText, { gfm: true, breaks: true, pedantic: false });
+                } catch (innerErr) {
+                    htmlOutput.innerHTML = "<p style='color:red;'>Error rendering Markdown. Check browser console.</p>";
+                    console.error("Markdown rendering error:", innerErr);
+                }
+            }
+        }
+
+        // Initial render and on input
+        markdownInput.addEventListener('input', renderMarkdown);
+
+        // Resizer logic
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // Prevent text selection during drag
+            isResizing = true;
+            document.body.style.userSelect = 'none'; // Prevent text selection globally
+
+            // Set flex-grow to 0 so flex-basis takes full control during resize
+            leftPane.style.flexGrow = '0';
+            rightPane.style.flexGrow = '0';
+
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', stopResize);
+        });
+
+        function handleMouseMove(e) {
+            if (!isResizing) return;
+
+            const containerRect = container.getBoundingClientRect();
+            let leftWidth = e.clientX - containerRect.left;
+            
+            // Minimum pane width (e.g., 30px to still see/drag resizer)
+            // Set to 0 if you want to allow complete collapse, but might be hard to reopen.
+            const minPaneWidth = 30; 
+            const resizerWidth = resizer.offsetWidth;
+
+            // Constrain left pane
+            if (leftWidth < minPaneWidth) {
+                leftWidth = minPaneWidth;
+            }
+            if (leftWidth > containerRect.width - resizerWidth - minPaneWidth) {
+                leftWidth = containerRect.width - resizerWidth - minPaneWidth;
+            }
+            
+            const rightWidth = containerRect.width - leftWidth - resizerWidth;
+
+            leftPane.style.flexBasis = `${leftWidth}px`;
+            rightPane.style.flexBasis = `${rightWidth}px`;
+        }
+
+        function stopResize() {
+            isResizing = false;
+            document.body.style.userSelect = ''; // Re-enable text selection
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', stopResize);
+            // The flex-grow 0 and pixel-based flex-basis will persist.
+            // This means after a manual resize, the panes won't auto-adjust to window resizes
+            // unless we convert back to percentages or restore flex-grow:1.
+            // For this tool, fixed pixel widths after manual drag is often acceptable.
+        }
+
+        // Set some default Markdown content
+        markdownInput.value = `# Welcome to Your Offline Markdown Viewer!
+
+## How to Use
+1.  **Paste or type** your Markdown text into this left pane.
+2.  The **rendered HTML** will appear live in the right pane.
+3.  **Drag the vertical bar** in the middle to resize the panes. You can shrink one pane almost completely to focus on the other.
+
+## Features
+*   **Live Preview:** Updates as you type.
+*   **GitHub Flavored Markdown (GFM):** Includes support for tables, fenced code blocks, etc.
+*   **Line Breaks:** Single newlines are rendered as line breaks (\`<br>\`).
+*   **Portable & Offline:** Just this HTML file and \`marked.min.js\` in the same folder. No installation needed!
+
+---
+
+### Example Markdown:
+
+\`\`\`javascript
+// Code block example
+function greet(name) {
+  return \`Hello, \${name}!\`;
+}
+console.log(greet("Markdown User"));
+\`\`\`
+
+- Item 1
+- Item 2
+  - Sub-item A
+  - Sub-item B
+
+> This is a blockquote. It's useful for highlighting text.
+
+**Bold text**, *italic text*, and \`inline code\`.
+
+A horizontal rule:
+***
+
+A table:
+
+| Header 1 | Header 2 | Header 3 |
+|----------|----------|----------|
+| Cell 1A  | Cell 2A  | Cell 3A  |
+| Cell 1B  | Cell 2B  | Cell 3B  |
+`;
+        renderMarkdown(); // Render the default text on load
+
+    </script>
+</body>
+</html>
